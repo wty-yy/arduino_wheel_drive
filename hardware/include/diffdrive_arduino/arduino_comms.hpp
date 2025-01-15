@@ -102,9 +102,17 @@ public:
     ss << "m " << val_1 << " " << val_2 << "\r";
     send_msg(ss.str());
   }
+  
+  void set_motor_rpm(int rpm_1, int rpm_2)
+  {
+    std::stringstream ss;
+    ss << "s " << rpm_1 << " " << rpm_2 << "\r";
+    send_msg(ss.str());
+  }
 
   void set_pid_values(int k_p, int k_d, int k_i, int k_o)
   {
+    return;
     std::stringstream ss;
     ss << "u " << k_p << ":" << k_d << ":" << k_i << ":" << k_o << "\r";
     send_msg(ss.str());
