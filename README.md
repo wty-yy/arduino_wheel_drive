@@ -17,6 +17,13 @@ https://youtu.be/J02jEKawE5U
 2. Change default config file [diffbot.ros2_control.xacro](./description/ros2_control/diffbot.ros2_control.xacro) to fit my robot
 
 ## Usage
+Install C++ serial library:
+```
+sudo apt install libserial-dev
+
+cd ~/ros2_ws
+colcon build --symlink-install
+```
 Use command below to test this drive
 ```bash
 ros2 launch diffdrive_arduino diffbot.launch.py
