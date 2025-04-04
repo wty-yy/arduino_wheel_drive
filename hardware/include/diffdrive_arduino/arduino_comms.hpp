@@ -6,6 +6,8 @@
 // #include <cstdlib>
 #include <libserial/SerialPort.h>
 #include <iostream>
+#include <vector>
+#include <unistd.h>
 
 
 LibSerial::BaudRate convert_baud_rate(int baud_rate)
@@ -38,9 +40,15 @@ public:
 
   void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms)
   {  
-    timeout_ms_ = timeout_ms;
     serial_conn_.Open(serial_device);
     serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
+    timeout_ms_ = timeout_ms;
+    for (int i = 0; i < 3; i++) {
+      std::ostringstream oss;
+      oss << "sleep " << i+1 << "/3 seconds";
+      RCLCPP_INFO(rclcpp::get_logger("DiffDriveArduinoHardware"), oss.str().c_str());
+      sleep(1);
+    }
   }
 
   void disconnect()
@@ -57,7 +65,11 @@ public:
   std::string send_msg(const std::string &msg_to_send, bool print_output = false)
   {
     serial_conn_.FlushIOBuffers(); // Just in case
-    serial_conn_.Write(msg_to_send);
+    serial_conn_.Write(msg_to_send+"\r");
+    std::ostringstream oss;
+    oss << "Sent: " << msg_to_send;
+    std::string result = oss.str();
+    // RCLCPP_INFO(rclcpp::get_logger("DiffDriveArduinoHardware"), result.c_str());
 
     std::string response = "";
     try
@@ -84,37 +96,25 @@ public:
     std::string response = send_msg("\r");
   }
 
-  void read_encoder_values(int &val_1, int &val_2)
+  void read_encoder_values(int &val_1, int &val_2, int &val_3, int &val_4)
   {
     std::string response = send_msg("e\r");
 
-    std::string delimiter = " ";
-    size_t del_pos = response.find(delimiter);
-    std::string token_1 = response.substr(0, del_pos);
-    std::string token_2 = response.substr(del_pos + delimiter.length());
+    std::istringstream iss(response);
+    std::vector<int> vals;
+    int val;
+    while (iss >> val) vals.push_back(val);
 
-    val_1 = std::atoi(token_1.c_str());
-    val_2 = std::atoi(token_2.c_str());
-  }
-  void set_motor_values(int val_1, int val_2)
-  {
-    std::stringstream ss;
-    ss << "m " << val_1 << " " << val_2 << "\r";
-    send_msg(ss.str());
+    val_1 = vals[0];
+    val_2 = vals[1];
+    val_3 = vals[2];
+    val_4 = vals[3];
   }
   
-  void set_motor_rpm(int rpm_1, int rpm_2)
+  void set_motor_rpm(int rpm_1, int rpm_2, int rpm_3, int rpm_4)
   {
     std::stringstream ss;
-    ss << "s " << rpm_1 << " " << rpm_2 << "\r";
-    send_msg(ss.str());
-  }
-
-  void set_pid_values(int k_p, int k_d, int k_i, int k_o)
-  {
-    return;
-    std::stringstream ss;
-    ss << "u " << k_p << ":" << k_d << ":" << k_i << ":" << k_o << "\r";
+    ss << "s " << rpm_1 << " " << rpm_2 << " " << rpm_3 << " " << rpm_4 << "\r";
     send_msg(ss.str());
   }
 

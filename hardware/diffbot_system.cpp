@@ -36,28 +36,19 @@ hardware_interface::CallbackReturn DiffDriveArduinoHardware::on_init(
   }
 
 
-  cfg_.left_wheel_name = info_.hardware_parameters["left_wheel_name"];
-  cfg_.right_wheel_name = info_.hardware_parameters["right_wheel_name"];
-  // cfg_.loop_rate = std::stof(info_.hardware_parameters["loop_rate"]);
+  cfg_.front_left_wheel_name = info_.hardware_parameters["front_left_wheel_name"];
+  cfg_.front_right_wheel_name = info_.hardware_parameters["front_right_wheel_name"];
+  cfg_.rear_left_wheel_name = info_.hardware_parameters["rear_left_wheel_name"];
+  cfg_.rear_right_wheel_name = info_.hardware_parameters["rear_right_wheel_name"];
   cfg_.device = info_.hardware_parameters["device"];
   cfg_.baud_rate = std::stoi(info_.hardware_parameters["baud_rate"]);
   cfg_.timeout_ms = std::stoi(info_.hardware_parameters["timeout_ms"]);
   cfg_.enc_counts_per_rev = std::stoi(info_.hardware_parameters["enc_counts_per_rev"]);
-  if (info_.hardware_parameters.count("pid_p") > 0)
-  {
-    cfg_.pid_p = std::stoi(info_.hardware_parameters["pid_p"]);
-    cfg_.pid_d = std::stoi(info_.hardware_parameters["pid_d"]);
-    cfg_.pid_i = std::stoi(info_.hardware_parameters["pid_i"]);
-    cfg_.pid_o = std::stoi(info_.hardware_parameters["pid_o"]);
-  }
-  else
-  {
-    RCLCPP_INFO(rclcpp::get_logger("DiffDriveArduinoHardware"), "PID values not supplied, using defaults.");
-  }
-  
 
-  wheel_l_.setup(cfg_.left_wheel_name, cfg_.enc_counts_per_rev);
-  wheel_r_.setup(cfg_.right_wheel_name, cfg_.enc_counts_per_rev);
+  wheel_front_l_.setup(cfg_.front_left_wheel_name, cfg_.enc_counts_per_rev);
+  wheel_front_r_.setup(cfg_.front_right_wheel_name, cfg_.enc_counts_per_rev);
+  wheel_rear_l_.setup(cfg_.rear_left_wheel_name, cfg_.enc_counts_per_rev);
+  wheel_rear_r_.setup(cfg_.rear_right_wheel_name, cfg_.enc_counts_per_rev);
 
 
   for (const hardware_interface::ComponentInfo & joint : info_.joints)
@@ -117,14 +108,24 @@ std::vector<hardware_interface::StateInterface> DiffDriveArduinoHardware::export
   std::vector<hardware_interface::StateInterface> state_interfaces;
 
   state_interfaces.emplace_back(hardware_interface::StateInterface(
-    wheel_l_.name, hardware_interface::HW_IF_POSITION, &wheel_l_.pos));
+    wheel_front_l_.name, hardware_interface::HW_IF_POSITION, &wheel_front_l_.pos));
   state_interfaces.emplace_back(hardware_interface::StateInterface(
-    wheel_l_.name, hardware_interface::HW_IF_VELOCITY, &wheel_l_.vel));
+    wheel_front_l_.name, hardware_interface::HW_IF_VELOCITY, &wheel_front_l_.vel));
 
   state_interfaces.emplace_back(hardware_interface::StateInterface(
-    wheel_r_.name, hardware_interface::HW_IF_POSITION, &wheel_r_.pos));
+    wheel_front_r_.name, hardware_interface::HW_IF_POSITION, &wheel_front_r_.pos));
   state_interfaces.emplace_back(hardware_interface::StateInterface(
-    wheel_r_.name, hardware_interface::HW_IF_VELOCITY, &wheel_r_.vel));
+    wheel_front_r_.name, hardware_interface::HW_IF_VELOCITY, &wheel_front_r_.vel));
+
+  state_interfaces.emplace_back(hardware_interface::StateInterface(
+    wheel_rear_l_.name, hardware_interface::HW_IF_POSITION, &wheel_rear_l_.pos));
+  state_interfaces.emplace_back(hardware_interface::StateInterface(
+    wheel_rear_l_.name, hardware_interface::HW_IF_VELOCITY, &wheel_rear_l_.vel));
+
+  state_interfaces.emplace_back(hardware_interface::StateInterface(
+    wheel_rear_r_.name, hardware_interface::HW_IF_POSITION, &wheel_rear_r_.pos));
+  state_interfaces.emplace_back(hardware_interface::StateInterface(
+    wheel_rear_r_.name, hardware_interface::HW_IF_VELOCITY, &wheel_rear_r_.vel));
 
   return state_interfaces;
 }
@@ -134,10 +135,16 @@ std::vector<hardware_interface::CommandInterface> DiffDriveArduinoHardware::expo
   std::vector<hardware_interface::CommandInterface> command_interfaces;
 
   command_interfaces.emplace_back(hardware_interface::CommandInterface(
-    wheel_l_.name, hardware_interface::HW_IF_VELOCITY, &wheel_l_.cmd));
+    wheel_front_l_.name, hardware_interface::HW_IF_VELOCITY, &wheel_front_l_.cmd));
 
   command_interfaces.emplace_back(hardware_interface::CommandInterface(
-    wheel_r_.name, hardware_interface::HW_IF_VELOCITY, &wheel_r_.cmd));
+    wheel_front_r_.name, hardware_interface::HW_IF_VELOCITY, &wheel_front_r_.cmd));
+
+  command_interfaces.emplace_back(hardware_interface::CommandInterface(
+    wheel_rear_l_.name, hardware_interface::HW_IF_VELOCITY, &wheel_rear_l_.cmd));
+
+  command_interfaces.emplace_back(hardware_interface::CommandInterface(
+    wheel_rear_r_.name, hardware_interface::HW_IF_VELOCITY, &wheel_rear_r_.cmd));
 
   return command_interfaces;
 }
@@ -178,10 +185,6 @@ hardware_interface::CallbackReturn DiffDriveArduinoHardware::on_activate(
   {
     return hardware_interface::CallbackReturn::ERROR;
   }
-  if (cfg_.pid_p > 0)
-  {
-    comms_.set_pid_values(cfg_.pid_p,cfg_.pid_d,cfg_.pid_i,cfg_.pid_o);
-  }
   RCLCPP_INFO(rclcpp::get_logger("DiffDriveArduinoHardware"), "Successfully activated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -204,17 +207,14 @@ hardware_interface::return_type DiffDriveArduinoHardware::read(
     return hardware_interface::return_type::ERROR;
   }
 
-  comms_.read_encoder_values(wheel_l_.enc, wheel_r_.enc);
+  comms_.read_encoder_values(wheel_front_l_.enc, wheel_front_r_.enc, wheel_rear_l_.enc, wheel_rear_r_.enc);
 
   double delta_seconds = period.seconds();
 
-  double pos_prev = wheel_l_.pos;
-  wheel_l_.pos = wheel_l_.calc_enc_angle();
-  wheel_l_.vel = (wheel_l_.pos - pos_prev) / delta_seconds;  // rad/s
-
-  pos_prev = wheel_r_.pos;
-  wheel_r_.pos = wheel_r_.calc_enc_angle();
-  wheel_r_.vel = (wheel_r_.pos - pos_prev) / delta_seconds;
+  wheel_front_l_.update_pos_and_vel(delta_seconds);
+  wheel_front_r_.update_pos_and_vel(delta_seconds);
+  wheel_rear_l_.update_pos_and_vel(delta_seconds);
+  wheel_rear_r_.update_pos_and_vel(delta_seconds);
 
   return hardware_interface::return_type::OK;
 }
@@ -228,12 +228,11 @@ hardware_interface::return_type diffdrive_arduino ::DiffDriveArduinoHardware::wr
   }
 
   // wheel_l_.cmd unit is: rad/s
-  int motor_l_rpm = wheel_l_.cmd * 30 / M_PI;
-  int motor_r_rpm = wheel_r_.cmd * 30 / M_PI;
-  // int motor_l_counts_per_loop = wheel_l_.cmd / wheel_l_.rads_per_count / cfg_.loop_rate;
-  // int motor_r_counts_per_loop = wheel_r_.cmd / wheel_r_.rads_per_count / cfg_.loop_rate;
-  // comms_.set_motor_values(motor_l_counts_per_loop, motor_r_counts_per_loop);
-  comms_.set_motor_rpm(motor_l_rpm, motor_r_rpm);
+  int motor_front_l_rpm = wheel_front_l_.cmd * 30 / M_PI;
+  int motor_front_r_rpm = wheel_front_r_.cmd * 30 / M_PI;
+  int motor_rear_l_rpm = wheel_rear_l_.cmd * 30 / M_PI;
+  int motor_rear_r_rpm = wheel_rear_r_.cmd * 30 / M_PI;
+  comms_.set_motor_rpm(motor_front_l_rpm, motor_front_r_rpm, motor_rear_l_rpm, motor_rear_r_rpm);
   return hardware_interface::return_type::OK;
 }
 

@@ -35,6 +35,12 @@ class Wheel
       return enc * rads_per_count;
     }
 
+    void update_pos_and_vel(double delta_seconds) {
+      double pos_prev = pos;
+      pos = calc_enc_angle();
+      vel = (pos - pos_prev) / delta_seconds;  // rad/s
+    }
+
 
 
 };
